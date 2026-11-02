@@ -21,7 +21,16 @@ m811 poll HZ                 polling rate 500 or 1000 (profile 1 only)
 m811 dpi STAGE VALUE         STAGE 1-5, VALUE 200-6200 in steps of 100 (profile 1 only)
 m811 lift N                  lift-off distance 1 or 2
 m811 scroll N                scroll speed 1-10 (profile 1 only)
-m811 key SIDE KEY            remap side key SIDE (1-8) to KEY: a-z, 0-9 or volup (profile 1 only)
+m811 key SIDE KEY            remap side key SIDE (1-8), profile 1 only. KEY is one of:
+                             a preset: left right middle back forward scrollup scrolldown off
+                               cut copy paste selectall find new print save switchwindow
+                               closewindow explorer run desktop lock browserhome browserback
+                               browserforward browserstop browserrefresh browsersearch favorites
+                               mail playpause stop prev next volup voldown mute player
+                               dpicycle dpi+ dpi- profilecycle profile+ profile- rate+ rate- ledswitch
+                             a key: a-z 0-9 f1-f12 enter esc backspace tab space delete home end
+                               pageup pagedown insert arrowup arrowdown arrowleft arrowright
+                             a combo: ctrl+ shift+ alt+ win+ before a key, e.g. ctrl+shift+t
 m811 macro SIDE SPEC         write a macro to slot 1 and bind it to side key SIDE
                              SPEC: comma list, letters are key taps, numbers are waits in ms
                              example: a,50,b,100,c

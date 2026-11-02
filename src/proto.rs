@@ -205,13 +205,10 @@ pub fn is_slot0_macro(entry: &[u8]) -> bool {
     entry[0] == 0x91 && entry[1] & 0x7F == 0
 }
 
-/// Button entry for a key name: a-z, 0-9, or "volup".
+/// Button entry for a preset word ("copy", "volup", "dpi+"), a key ("a", "f5") or a
+/// combo ("ctrl+shift+t"). See buttons.rs. Never a macro.
 pub fn key_entry(key: &str) -> Option<[u8; 4]> {
-    let k = key.trim().to_lowercase();
-    if k == "volup" {
-        return Some([0x8E, 0x01, 0xE9, 0x00]);
-    }
-    hid_usage(&k).map(|u| [0x90, 0x00, u, 0x00])
+    crate::buttons::entry(key)
 }
 
 fn hid_usage(k: &str) -> Option<u8> {
@@ -265,17 +262,18 @@ pub fn macro_(side: usize, spec: &str) -> Result<Vec<Packet>, String> {
 /// Human text for a 4-byte button entry.
 pub fn describe_entry(e: &[u8; 4]) -> String {
     match e {
-        [0x90, 0x00, u, 0x00] => match *u {
-            0x04..=0x1D => ((b'a' + u - 0x04) as char).to_string(),
-            0x1E..=0x26 => ((b'1' + u - 0x1E) as char).to_string(),
-            0x27 => "0".into(),
-            _ => format!("key 0x{u:02x}"),
-        },
-        [0x8E, 0x01, 0xE9, 0x00] => "volup".into(),
+        _ if crate::buttons::word(e).is_some() => crate::buttons::word(e).unwrap(),
+        [0x90, 0x00, u, 0x00] => format!("key 0x{u:02x}"),
+        [0x99, ..] => format!("fire key {}", hex4(e)),
+        [0x9B, ..] => format!("sniper {}", hex4(e)),
         [0x91, s, ..] if is_slot0_macro(e) => format!("macro slot 0 (full auto){}", if s & 0x80 != 0 { ", repeat" } else { "" }),
         [0x91, s, ..] => format!("macro slot {}{}", s & 0x7F, if s & 0x80 != 0 { ", repeat" } else { "" }),
-        _ => e.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "),
+        _ => hex4(e),
     }
+}
+
+fn hex4(e: &[u8; 4]) -> String {
+    e.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")
 }
 
 pub fn dpi_from_code(code: u8) -> Option<u32> {
@@ -427,6 +425,9 @@ mod tests {
         assert_eq!(hex(&key(3, key_entry("volup").unwrap())), cfg("02 f3 aa 00 04 00 00 00 8e 01 e9 00 00 00 00 00"));
         assert_eq!(hex(&key(2, key_entry("0").unwrap())), cfg("02 f3 a6 00 04 00 00 00 90 00 27 00 00 00 00 00"));
         assert!(key_entry("ab").is_none());
+        assert_eq!(hex(&key(4, key_entry("copy").unwrap())), cfg("02 f3 ae 00 04 00 00 00 8f 01 06 00 00 00 00 00"));
+        assert_eq!(describe_entry(&[0x8F, 0x01, 0x06, 0x00]), "copy");
+        assert_eq!(describe_entry(&[0x91, 0x00, 0x01, 0x00]), "macro slot 0 (full auto)");
     }
 
     #[test]

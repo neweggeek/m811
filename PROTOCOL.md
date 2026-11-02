@@ -89,25 +89,27 @@ Four bytes each. Side key 1 is at 0x00A2, +4 per key.
 ### Button function table (static)
 
 The app turns each menu function into a 4-byte entry from a table (0x4BB320, 55 rows).
-Names come from the data, not from the menu, unless marked.
+Names: the app's button menu (Basic, Windows, Advance, Media, DPI, Profile Menu, Polling Rate,
+Macro Manager, GunFile Manager, Led Switch, Button Off) lists its items in the same order as
+the table ids, so names are matched by order. Windows and Media items also match their
+data exactly. DPI / profile / rate / LED names rely on the order only: confirm by pressing.
+No built-in macro presets ship with the app (MacroDB folder is empty).
 
 | Entry | Meaning |
 |---|---|
 | 81 / 82 / 83 / 84 / 85 | Left / right / middle / back / forward |
 | 00 00 00 00 | Disabled |
 | 30 00 00 00 | Unknown (function id 0x0D) |
-| 88 00 00 00 | Unknown (id 0x2F) |
-| 89 / 8A | DPI- / DPI+ |
+| 88 / 8A / 89 | DPI switch / DPI + / DPI - |
 | 8B / 8C | Scroll up / scroll down |
-| 8D | Profile cycle |
-| 94 / 95 | Probably profile + / profile - (menu has both) |
-| 97 / 98 | Unknown (ids 0x32 / 0x33) |
-| 9A 01 01 | Unknown (id 0x37) |
+| 8D / 94 / 95 | Profile switch / profile + / profile - |
+| 97 / 98 | Polling rate + / - |
+| 9A 01 01 | Led switch (lighting on/off) |
 | 9B 04 X Y | Sniper: while held, DPI = codes X Y from the DPI table |
-| 9D | Unknown (id 0x1FE) |
-| 8F mm kk 00 | Key with modifiers. mm: 01 Ctrl, 04 Alt, 08 Win. kk = HID usage |
+| 9D | Probably gun file (recoil script, "GunFile Manager") |
+| 8F mm kk 00 | Combo key. mm: 01 Ctrl, 02 Shift, 04 Alt, 08 Win (HID bits). kk = HID usage |
 | 8E 01 lo hi | Consumer usage 0xhilo (E9 vol+, EA vol-, E2 mute, CD play, B5 next, B6 prev, B7 stop, 018A mail, 0183 player) |
-| 8E 01 FF 1F-25 | Unknown, 7 entries (ids 0x1F-0x25) |
+| 8E 01 FF 1F-25 | Browser home, back, forward, stop, refresh, search, favorites |
 | 90 00 uu 00 | Keyboard key |
 | 91 | Macro |
 | 99 | Fire key |
