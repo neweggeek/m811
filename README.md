@@ -61,8 +61,10 @@ Built so an LLM agent can drive it. See [AGENTS.md](AGENTS.md) and
 
 ## Get it
 
-Download `m811-windows` from the latest
-[build run](../../actions/workflows/build.yml), unzip, run `m811.exe`.
+Download `m811.exe` from the latest [release](../../releases/latest) and run it.
+Builds from every push are also under [Actions](../../actions/workflows/build.yml).
+
+To publish a new release: `git tag v0.1.1 && git push origin v0.1.1`.
 
 Or build it yourself:
 
