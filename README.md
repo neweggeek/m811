@@ -16,7 +16,8 @@ sends. Unit tests check the bytes match.
 - Poll rate 500 / 1000 Hz (profile 1)
 - DPI stages 1-5, 200-6200 in steps of 100 (profile 1, vendor table)
 - Lift-off distance and scroll speed (profile 1 for scroll)
-- Remap side keys 1-8 to a letter, digit or volume up (profile 1)
+- Remap side keys 1-8 (profile 1) to any function the vendor app offers (copy, paste,
+  media keys, browser keys, DPI/profile switch ...), any key, or a combo like ctrl+shift+t
 - Write macro slot 1 and bind it to a side key
 
 Safety:

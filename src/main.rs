@@ -1,6 +1,7 @@
 // Hide the console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod buttons;
 mod cli;
 mod games;
 mod mouse;
@@ -359,30 +360,56 @@ impl App {
 
     fn buttons(&mut self, ui: &mut egui::Ui) {
         let keys = self.status.as_ref().map(|s| s.side_keys);
-        card(ui, "Side keys", "Profile 1. New key: a letter, a digit, or volup. Keys holding your slot 0 macro are locked.", |ui| {
-            egui::Grid::new("keys").num_columns(4).spacing([16.0, 10.0]).show(ui, |ui| {
-                for side in 1..=8 {
-                    let cur = keys.map(|k| k[side - 1]);
-                    ui.label(RichText::new(format!("Key {side}")).strong());
-                    let text = cur.map_or("?".into(), |e| proto::describe_entry(&e));
-                    ui.label(RichText::new(text).monospace().color(MUTED));
-                    if cur.is_some_and(|e| proto::is_slot0_macro(&e)) {
-                        ui.label(RichText::new("🔒 locked").color(MUTED));
-                        ui.label("");
-                    } else {
-                        ui.add(egui::TextEdit::singleline(&mut self.keys[side - 1]).hint_text("key").desired_width(70.0));
-                        if ui.button("Set").clicked() {
-                            match cli::parse(&format!("key {side} {}", self.keys[side - 1])) {
-                                Ok(Some(c)) => self.run(c),
-                                Ok(None) => {}
-                                Err(e) => (self.msg, self.err) = (e, true),
+        card(
+            ui,
+            "Side keys",
+            "Profile 1. Pick a function (same list as the vendor app), or type a key or combo like f5 or ctrl+shift+t. Keys holding your slot 0 macro are locked.",
+            |ui| {
+                egui::Grid::new("keys").num_columns(5).spacing([16.0, 10.0]).show(ui, |ui| {
+                    for side in 1..=8 {
+                        let cur = keys.map(|k| k[side - 1]);
+                        ui.label(RichText::new(format!("Key {side}")).strong());
+                        let text = cur.map_or("?".into(), |e| {
+                            buttons::label(&e).map_or_else(|| proto::describe_entry(&e), String::from)
+                        });
+                        ui.label(RichText::new(text).color(MUTED));
+                        if cur.is_some_and(|e| proto::is_slot0_macro(&e)) {
+                            ui.label(RichText::new("🔒 locked").color(MUTED));
+                            ui.label("");
+                            ui.label("");
+                        } else {
+                            let mut pick = None;
+                            ui.menu_button("Function ▾", |ui| {
+                                for g in buttons::GROUPS {
+                                    ui.menu_button(g, |ui| {
+                                        for p in buttons::PRESETS.iter().filter(|p| p.group == g) {
+                                            if ui.button(p.label).clicked() {
+                                                pick = Some(p.word);
+                                                ui.close();
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                            if let Some(w) = pick {
+                                self.run(cli::Cmd::Key(side, w.into()));
                             }
+                            ui.horizontal(|ui| {
+                                ui.add(egui::TextEdit::singleline(&mut self.keys[side - 1]).hint_text("key or combo").desired_width(110.0));
+                                if ui.button("Set").clicked() {
+                                    match cli::parse(&format!("key {side} {}", self.keys[side - 1])) {
+                                        Ok(Some(c)) => self.run(c),
+                                        Ok(None) => {}
+                                        Err(e) => (self.msg, self.err) = (e, true),
+                                    }
+                                }
+                            });
                         }
+                        ui.end_row();
                     }
-                    ui.end_row();
-                }
-            });
-        });
+                });
+            },
+        );
     }
 
     fn macro_page(&mut self, ui: &mut egui::Ui) {

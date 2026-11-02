@@ -24,7 +24,9 @@ Commands (also valid as lines in a config file):
   dpi STAGE VALUE              STAGE 1-5, VALUE 200-6200 in steps of 100 (profile 1)
   lift N                       lift-off distance 1 or 2
   scroll N                     scroll speed 1-10 (profile 1)
-  key SIDE KEY                 SIDE 1-8, KEY a-z, 0-9 or volup (profile 1)
+  key SIDE KEY                 SIDE 1-8 (profile 1). KEY: a preset (copy, volup, dpi+ ...),
+                               a key (a, 5, f5, enter, esc ...) or a combo (ctrl+shift+t)
+  presets                      list every preset (same list as the vendor app)
   macro SIDE SPEC              SPEC like a,50,b (letters tap, numbers wait ms)
                                writes macro slot 1, binds it to SIDE
 
@@ -106,7 +108,7 @@ pub fn parse(line: &str) -> Result<Option<Cmd>, String> {
         "key" => {
             let side = num(w.next(), "side key", 1, 8)?;
             let k = w.next().ok_or("missing key")?.to_string();
-            proto::key_entry(&k).ok_or(format!("key must be a-z, 0-9 or volup, got '{k}'"))?;
+            proto::key_entry(&k).ok_or(format!("unknown key '{k}'. Use a preset (m811 presets), a key like a, f5, enter, or a combo like ctrl+c"))?;
             Cmd::Key(side, k)
         }
         "macro" => {
@@ -217,11 +219,27 @@ fn read_file(path: &str) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Every button preset, grouped like the vendor app's menu.
+pub fn presets_text() -> String {
+    let mut t = String::new();
+    for g in crate::buttons::GROUPS {
+        t += &format!("{g}:\n");
+        for p in crate::buttons::PRESETS.iter().filter(|p| p.group == g) {
+            t += &format!("  {:<16}{}\n", p.word, p.label);
+        }
+    }
+    t += "Keys: a-z 0-9 f1-f12 enter esc backspace tab space delete home end pageup pagedown\n";
+    t += "      insert arrowup arrowdown arrowleft arrowright printscreen ...\n";
+    t += "Combos: ctrl+ shift+ alt+ win+ in front of a key, e.g. ctrl+shift+t\n";
+    t
+}
+
 fn cli(args: &[String]) -> Result<(), String> {
     let first = args[0].as_str();
     match first {
         "help" | "-h" | "--help" => println!("{HELP}"),
         "tray" => crate::tray::run()?,
+        "presets" => print!("{}", presets_text()),
         "prompt" => {
             println!("{}", include_str!("../docs/LLM-PROMPT.md"));
             match Mouse::open().and_then(|m| m.status()) {
@@ -302,6 +320,7 @@ mod tests {
         // Stage 5 uses flag 01 (above 6200): must not come out as "dpi 5 3100".
         assert!(t.contains("# dpi 5 unknown code 48 flag 01\n"));
         assert!(t.contains("# lift 1\n"));
-        assert_eq!(parse_all(&t).unwrap().len(), 1 + 5 + 1 + 4 + 3);
+        assert!(t.contains("key 5 off\n"));
+        assert_eq!(parse_all(&t).unwrap().len(), 1 + 5 + 1 + 4 + 7);
     }
 }

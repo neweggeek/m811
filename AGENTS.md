@@ -33,7 +33,9 @@ poll HZ                      500 or 1000 (profile 1)
 dpi STAGE VALUE              STAGE 1-5, VALUE 200-6200 in steps of 100 (profile 1)
 lift N                       lift-off distance 1 or 2
 scroll N                     scroll speed 1-10 (profile 1)
-key SIDE KEY                 SIDE 1-8, KEY a-z, 0-9 or volup (profile 1)
+key SIDE KEY                 SIDE 1-8 (profile 1). KEY: a preset (copy, volup, dpi+ ...),
+                             a key (a, 5, f5, enter, esc ...) or a combo (ctrl+shift+t)
+m811 presets                 list every preset (same list as the vendor app)
 macro SIDE SPEC              SPEC like a,50,b: letters tap, numbers wait ms
                              writes macro slot 1, binds it to side key SIDE
 ```
