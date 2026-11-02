@@ -1,0 +1,13 @@
+[package]
+name = "m811"
+version = "0.1.0"
+edition = "2021"
+description = "Control the Redragon M811 Aatrox mouse without the vendor app"
+
+[dependencies]
+eframe = "0.37"
+hidapi = "2.6"
+
+[profile.release]
+opt-level = "s"
+strip = true
