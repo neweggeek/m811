@@ -18,7 +18,11 @@ No single standard for "control a mouse's settings from an LLM". The pieces peop
 - Plain text config, same words as the CLI. `status` output is a valid config
 - `AGENTS.md` with rules (never touch macro slot 0, batch tests in 3s)
 
-## Phase 2: MCP server
+## Phase 2: MCP server (dropped)
+
+David prefers a paste-in doc over MCP: `m811 prompt` prints docs/LLM-PROMPT.md plus
+current settings. Notes kept below in case it comes back.
+
 
 - `m811 mcp` subcommand speaking MCP over stdio (JSON-RPC lines). No new crate needed for
   the stdio transport; `serde_json` is the one dep worth adding
@@ -29,7 +33,7 @@ No single standard for "control a mouse's settings from an LLM". The pieces peop
 
 ## Phase 3: hooks
 
-- Watch the foreground app and switch profile or lighting per game (`m811 watch rules.cfg`)
+- Done: `m811 tray` switches per game from games.cfg
 - Port the side-key color ladder (`tools/m811_ladder.py`) into the app
 
 ## Open questions

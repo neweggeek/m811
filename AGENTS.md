@@ -21,6 +21,8 @@ m811 status                  print current settings as a config file (read only)
 m811 apply FILE              run every command in FILE (- reads stdin)
 m811 check FILE              parse FILE, send nothing
 m811 unstick                 leave config mode if the mouse froze
+m811 prompt                  print docs/LLM-PROMPT.md + current settings
+m811 tray                    tray icon + per-game profiles (%APPDATA%\m811\games.cfg)
 m811 help                    full help
 
 profile N                    switch to profile N (1-5)

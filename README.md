@@ -33,6 +33,29 @@ m811 led 1 solid ff0000   # one change
 m811 help
 ```
 
+Paste into any LLM (ChatGPT, Claude, ...) to get commands for what you want:
+
+```
+m811 prompt | clip        # copies docs/LLM-PROMPT.md + your current settings
+```
+
+## Per-game profiles and tray
+
+`m811 tray` puts an icon in the system tray. Every 2 seconds it checks which program is
+in front and runs the matching block from `%APPDATA%\m811\games.cfg`:
+
+```
+game valorant.exe
+led 2 solid ff0000
+profile 2
+
+default
+profile 1
+```
+
+Edit it on the **Games** page in the window, or from the tray menu. The tray menu and the
+Games page both have **Start with Windows** (adds `m811 tray` to your startup programs).
+
 Built so an LLM agent can drive it. See [AGENTS.md](AGENTS.md) and
 [docs/llm-control.md](docs/llm-control.md).
 
@@ -53,4 +76,6 @@ target\release\m811.exe
 - `src/proto.rs` packet builders, no I/O, with tests
 - `src/mouse.rs` HID open / read / send
 - `src/cli.rs` command line and config files, with tests
+- `src/games.rs` per-game rules, with tests
+- `src/tray.rs` Windows tray icon, front-window watcher, start with Windows
 - `src/main.rs` the window
