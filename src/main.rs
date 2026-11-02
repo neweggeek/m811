@@ -2,8 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod cli;
+mod games;
 mod mouse;
 mod proto;
+mod tray;
 
 use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 use mouse::{Mouse, Status};
@@ -91,15 +93,17 @@ enum Page {
     Buttons,
     Macro,
     Performance,
+    Games,
 }
 
 impl Page {
-    const ALL: [(Page, &'static str, &'static str); 5] = [
+    const ALL: [(Page, &'static str, &'static str); 6] = [
         (Page::Lighting, "Lighting", "Effects and color"),
         (Page::Dpi, "DPI", "Sensitivity stages"),
         (Page::Buttons, "Buttons", "Side key mapping"),
         (Page::Macro, "Macro", "Record key taps"),
         (Page::Performance, "Performance", "Polling rate"),
+        (Page::Games, "Games", "Per-game profiles, tray"),
     ];
 }
 
@@ -113,6 +117,8 @@ struct App {
     keys: [String; 8],
     macro_side: usize,
     macro_spec: String,
+    games_text: String,
+    startup: bool,
 }
 
 impl App {
@@ -127,6 +133,8 @@ impl App {
             keys: Default::default(),
             macro_side: 1,
             macro_spec: "a,50,b".into(),
+            games_text: games::load_text(),
+            startup: tray::startup_enabled(),
         };
         app.refresh();
         app.load_led();
@@ -200,6 +208,7 @@ impl eframe::App for App {
                     Page::Buttons => self.buttons(ui),
                     Page::Macro => self.macro_page(ui),
                     Page::Performance => self.performance(ui),
+                    Page::Games => self.games(ui),
                 });
             });
     }
@@ -408,6 +417,46 @@ impl App {
         });
         card(ui, "Command line", "Same settings from a terminal or a script. See AGENTS.md.", |ui| {
             ui.label(RichText::new("m811 status > my.cfg\nm811 apply my.cfg").monospace());
+        });
+    }
+}
+
+impl App {
+    fn games(&mut self, ui: &mut egui::Ui) {
+        card(ui, "Per-game profiles", "The tray app watches which program is in front and runs its block.", |ui| {
+            ui.add(
+                egui::TextEdit::multiline(&mut self.games_text)
+                    .font(egui::TextStyle::Monospace)
+                    .desired_rows(14)
+                    .desired_width(f32::INFINITY),
+            );
+            ui.horizontal(|ui| {
+                if ui.button("Save").clicked() {
+                    (self.msg, self.err) = match games::save_text(&self.games_text) {
+                        Ok(()) => (format!("Saved {}", games::path().display()), false),
+                        Err(e) => (format!("games.cfg {e}"), true),
+                    };
+                }
+                ui.label(RichText::new(games::path().display().to_string()).small().color(MUTED));
+            });
+        });
+        card(ui, "Tray", "Runs in the background so game profiles switch on their own.", |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("Start tray now").clicked() {
+                    match std::env::current_exe().and_then(|e| std::process::Command::new(e).arg("tray").spawn()) {
+                        Ok(_) => (self.msg, self.err) = ("Tray started".into(), false),
+                        Err(e) => (self.msg, self.err) = (e.to_string(), true),
+                    }
+                }
+                let before = self.startup;
+                ui.checkbox(&mut self.startup, "Start with Windows");
+                if self.startup != before {
+                    if let Err(e) = tray::set_startup(self.startup) {
+                        self.startup = before;
+                        (self.msg, self.err) = (e, true);
+                    }
+                }
+            });
         });
     }
 }

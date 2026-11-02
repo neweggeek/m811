@@ -12,6 +12,8 @@ m811 - control the Redragon M811 mouse
   m811 apply FILE              run every command in FILE (- = stdin)
   m811 check FILE              parse FILE, send nothing
   m811 unstick                 leave config mode if the mouse froze
+  m811 prompt                  print a doc to paste into any LLM (+ current settings)
+  m811 tray                    tray icon, switches settings per game (games.cfg)
 
 Commands (also valid as lines in a config file):
   profile N                    switch to profile N (1-5)
@@ -203,6 +205,14 @@ fn cli(args: &[String]) -> Result<(), String> {
     let first = args[0].as_str();
     match first {
         "help" | "-h" | "--help" => println!("{HELP}"),
+        "tray" => crate::tray::run()?,
+        "prompt" => {
+            println!("{}", include_str!("../docs/LLM-PROMPT.md"));
+            match Mouse::open().and_then(|m| m.status()) {
+                Ok(s) => println!("## Current settings\n\n```\n{}```", status_text(&s)),
+                Err(e) => println!("## Current settings\n\nUnknown ({e})."),
+            }
+        }
         "status" => print!("{}", status_text(&Mouse::open()?.status()?)),
         "unstick" => Mouse::open()?.unstick()?,
         "check" | "apply" => {
