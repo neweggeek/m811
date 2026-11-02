@@ -19,6 +19,8 @@ m811 led N EFFECT [RRGGBB]   lighting for profile N
                              solid, breathing and flash need a hex color, e.g. ff0000
 m811 poll HZ                 polling rate 500 or 1000 (profile 1 only)
 m811 dpi STAGE VALUE         STAGE 1-5, VALUE 200-6200 in steps of 100 (profile 1 only)
+m811 lift N                  lift-off distance 1 or 2
+m811 scroll N                scroll speed 1-10 (profile 1 only)
 m811 key SIDE KEY            remap side key SIDE (1-8) to KEY: a-z, 0-9 or volup (profile 1 only)
 m811 macro SIDE SPEC         write a macro to slot 1 and bind it to side key SIDE
                              SPEC: comma list, letters are key taps, numbers are waits in ms

@@ -31,8 +31,8 @@ led N EFFECT [RRGGBB]        lighting for profile N
                              solid, breathing and flash need a color
 poll HZ                      500 or 1000 (profile 1)
 dpi STAGE VALUE              STAGE 1-5, VALUE 200-6200 in steps of 100 (profile 1)
-lift N                       lift-off distance 1 or 2 (untested)
-scroll N                     scroll speed 1-10 (profile 1, untested)
+lift N                       lift-off distance 1 or 2
+scroll N                     scroll speed 1-10 (profile 1)
 key SIDE KEY                 SIDE 1-8, KEY a-z, 0-9 or volup (profile 1)
 macro SIDE SPEC              SPEC like a,50,b: letters tap, numbers wait ms
                              writes macro slot 1, binds it to side key SIDE
