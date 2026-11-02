@@ -97,6 +97,20 @@ impl Effect {
         }
     }
 
+    /// Word used in the CLI and config files.
+    pub fn word(self) -> &'static str {
+        match self {
+            Effect::Off => "off",
+            Effect::Full => "solid",
+            Effect::Breathing => "breathing",
+            Effect::Rainbow => "rainbow",
+            Effect::Flash => "flash",
+            Effect::Wave => "wave",
+            Effect::Trace => "trace",
+            Effect::Reactive => "reactive",
+        }
+    }
+
     /// (type, speed, flags). From the vendor capture.
     fn bytes(self) -> (u8, u8, u8) {
         match self {

@@ -1,30 +1,115 @@
 // Hide the console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cli;
 mod mouse;
 mod proto;
 
-use eframe::egui;
+use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 use mouse::{Mouse, Status};
 use proto::Effect;
 
+const ACCENT: Color32 = Color32::from_rgb(0xE5, 0x39, 0x35);
+const BG: Color32 = Color32::from_rgb(0x14, 0x15, 0x18);
+const PANEL: Color32 = Color32::from_rgb(0x1C, 0x1D, 0x21);
+const CARD: Color32 = Color32::from_rgb(0x25, 0x26, 0x2B);
+const CHIP: Color32 = Color32::from_rgb(0x32, 0x33, 0x3A);
+const MUTED: Color32 = Color32::from_rgb(0x9A, 0x9C, 0xA3);
+const OK: Color32 = Color32::from_rgb(0x4C, 0xC2, 0x6A);
+const PRESETS: [[u8; 3]; 8] = [
+    [255, 0, 0],
+    [255, 128, 0],
+    [255, 255, 0],
+    [0, 255, 0],
+    [0, 255, 255],
+    [0, 0, 255],
+    [128, 0, 255],
+    [255, 255, 255],
+];
+
 fn main() -> eframe::Result {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() {
+        attach_console();
+        std::process::exit(cli::main(&args));
+    }
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([520.0, 720.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([860.0, 600.0]).with_min_inner_size([700.0, 480.0]),
         ..Default::default()
     };
-    eframe::run_native("M811", options, Box::new(|_| Ok(Box::new(App::new()))))
+    eframe::run_native(
+        "M811",
+        options,
+        Box::new(|cc| {
+            style(&cc.egui_ctx);
+            Ok(Box::new(App::new()))
+        }),
+    )
+}
+
+/// Release builds have no console. Borrow the parent's so CLI output shows.
+#[cfg(windows)]
+fn attach_console() {
+    extern "system" {
+        fn AttachConsole(pid: u32) -> i32;
+    }
+    unsafe {
+        AttachConsole(u32::MAX);
+    }
+}
+
+#[cfg(not(windows))]
+fn attach_console() {}
+
+fn style(ctx: &egui::Context) {
+    ctx.set_visuals(egui::Visuals::dark());
+    ctx.all_styles_mut(|s| {
+        s.spacing.item_spacing = Vec2::new(8.0, 8.0);
+        s.spacing.button_padding = Vec2::new(12.0, 6.0);
+        s.visuals.panel_fill = BG;
+        s.visuals.window_fill = PANEL;
+        s.visuals.selection.bg_fill = ACCENT;
+        s.visuals.selection.stroke = Stroke::new(1.0, Color32::WHITE);
+        s.visuals.hyperlink_color = ACCENT;
+        for w in [&mut s.visuals.widgets.inactive, &mut s.visuals.widgets.hovered, &mut s.visuals.widgets.active] {
+            w.corner_radius = CornerRadius::same(6);
+        }
+        s.visuals.widgets.inactive.weak_bg_fill = CHIP;
+        s.visuals.widgets.inactive.bg_fill = CHIP;
+        s.visuals.extreme_bg_color = Color32::from_rgb(0x10, 0x10, 0x13);
+        s.text_styles.insert(egui::TextStyle::Heading, egui::FontId::proportional(22.0));
+        s.text_styles.insert(egui::TextStyle::Body, egui::FontId::proportional(15.0));
+        s.text_styles.insert(egui::TextStyle::Small, egui::FontId::proportional(12.5));
+        s.text_styles.insert(egui::TextStyle::Button, egui::FontId::proportional(15.0));
+    });
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Page {
+    Lighting,
+    Dpi,
+    Buttons,
+    Macro,
+    Performance,
+}
+
+impl Page {
+    const ALL: [(Page, &'static str, &'static str); 5] = [
+        (Page::Lighting, "Lighting", "Effects and color"),
+        (Page::Dpi, "DPI", "Sensitivity stages"),
+        (Page::Buttons, "Buttons", "Side key mapping"),
+        (Page::Macro, "Macro", "Record key taps"),
+        (Page::Performance, "Performance", "Polling rate"),
+    ];
 }
 
 struct App {
+    page: Page,
     msg: String,
+    err: bool,
     status: Option<Status>,
-    profile: usize,
-    led_profile: usize,
     effect: Effect,
     color: [u8; 3],
-    poll_hz: u32,
-    dpi: [u32; 5],
     keys: [String; 8],
     macro_side: usize,
     macro_spec: String,
@@ -33,197 +118,296 @@ struct App {
 impl App {
     fn new() -> App {
         let mut app = App {
+            page: Page::Lighting,
             msg: String::new(),
+            err: false,
             status: None,
-            profile: 1,
-            led_profile: 1,
             effect: Effect::Wave,
             color: [0, 255, 0],
-            poll_hz: 1000,
-            dpi: [1000; 5],
             keys: Default::default(),
             macro_side: 1,
             macro_spec: "a,50,b".into(),
         };
         app.refresh();
+        app.load_led();
         app
     }
 
-    /// Read the mouse and copy its values into the controls.
-    fn refresh(&mut self) {
-        match Mouse::open().and_then(|m| m.status()) {
-            Ok(s) => {
-                self.profile = s.profile.clamp(1, 5) as usize;
-                self.led_profile = self.profile;
-                let rec = s.leds[self.led_profile - 1];
-                if let Some(e) = Effect::from_record(&rec) {
-                    self.effect = e;
-                }
-                self.color = [rec[0], rec[1], rec[2]];
-                if let Some(hz) = s.poll_hz {
-                    self.poll_hz = hz;
-                }
-                for (i, &c) in s.dpi.iter().enumerate() {
-                    if let Some(d) = proto::dpi_from_code(c) {
-                        self.dpi[i] = d;
-                    }
-                }
-                self.status = Some(s);
-                self.msg = "Read mouse OK".into();
+    fn profile(&self) -> usize {
+        self.status.as_ref().map_or(1, |s| s.profile.clamp(1, 5) as usize)
+    }
+
+    /// Copy the active profile's lighting into the editor.
+    fn load_led(&mut self) {
+        if let Some(s) = &self.status {
+            let rec = s.leds[self.profile() - 1];
+            if let Some(e) = Effect::from_record(&rec) {
+                self.effect = e;
             }
-            Err(e) => {
-                self.status = None;
-                self.msg = e;
+            if self.effect.needs_color() {
+                self.color = [rec[0], rec[1], rec[2]];
             }
         }
     }
 
-    /// Open the mouse, run f, show the result, read the mouse again.
-    fn run(&mut self, what: &str, f: impl FnOnce(&Mouse) -> Result<(), String>) {
-        let r = Mouse::open().and_then(|m| f(&m));
-        let msg = match r {
-            Ok(()) => format!("{what}: done"),
-            Err(e) => format!("{what}: {e}"),
-        };
+    fn refresh(&mut self) {
+        match Mouse::open().and_then(|m| m.status()) {
+            Ok(s) => {
+                self.status = Some(s);
+                (self.msg, self.err) = ("Connected".into(), false);
+            }
+            Err(e) => {
+                self.status = None;
+                (self.msg, self.err) = (e, true);
+            }
+        }
+    }
+
+    /// Open the mouse, run one command, show the result, read the mouse again.
+    fn run(&mut self, c: cli::Cmd) {
+        let what = format!("{c:?}");
+        let r = Mouse::open().and_then(|m| cli::run(&m, &c));
         self.refresh();
-        self.msg = msg;
+        (self.msg, self.err) = match r {
+            Ok(()) => (format!("Saved: {what}"), false),
+            Err(e) => (format!("{what}: {e}"), true),
+        };
     }
 }
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::Panel::bottom("msg").show(ui, |ui| {
-            ui.label(&self.msg);
-        });
-        egui::CentralPanel::default().show(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| self.body(ui));
-        });
+        egui::Panel::top("header")
+            .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::symmetric(16, 12)))
+            .show(ui, |ui| self.header(ui));
+        egui::Panel::bottom("status")
+            .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::symmetric(16, 6)))
+            .show(ui, |ui| {
+                let c = if self.err { ACCENT } else { MUTED };
+                ui.label(RichText::new(&self.msg).color(c).small());
+            });
+        egui::Panel::left("nav")
+            .resizable(false)
+            .exact_size(200.0)
+            .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::same(12)))
+            .show(ui, |ui| self.nav(ui));
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(BG).inner_margin(egui::Margin::same(20)))
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| match self.page {
+                    Page::Lighting => self.lighting(ui),
+                    Page::Dpi => self.dpi(ui),
+                    Page::Buttons => self.buttons(ui),
+                    Page::Macro => self.macro_page(ui),
+                    Page::Performance => self.performance(ui),
+                });
+            });
     }
 }
 
+fn card(ui: &mut egui::Ui, title: &str, note: &str, body: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new().fill(CARD).corner_radius(10).inner_margin(16).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.label(RichText::new(title).strong().size(17.0));
+        if !note.is_empty() {
+            ui.label(RichText::new(note).color(MUTED).small());
+        }
+        ui.add_space(6.0);
+        body(ui);
+    });
+    ui.add_space(12.0);
+}
+
+/// Button that looks selected when `on`.
+fn pill(ui: &mut egui::Ui, text: &str, on: bool) -> bool {
+    let b = egui::Button::new(RichText::new(text).color(if on { Color32::WHITE } else { MUTED }))
+        .fill(if on { ACCENT } else { CHIP })
+        .corner_radius(16)
+        .min_size(Vec2::new(44.0, 30.0));
+    ui.add(b).clicked()
+}
+
+fn rgb(c: [u8; 3]) -> Color32 {
+    Color32::from_rgb(c[0], c[1], c[2])
+}
+
 impl App {
-    fn body(&mut self, ui: &mut egui::Ui) {
+    fn header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("Read mouse").clicked() {
-                self.refresh();
-            }
-            if ui.button("Unstick").on_hover_text("Send config mode off. Use if the mouse stops moving.").clicked() {
-                self.run("Unstick", |m| m.unstick());
-            }
-        });
-
-        ui.separator();
-        ui.heading("Profile");
-        ui.horizontal(|ui| {
+            ui.label(RichText::new("AATROX M811").strong().size(20.0).color(Color32::WHITE));
+            let (dot, text) = if self.status.is_some() { (OK, "connected") } else { (ACCENT, "not found") };
+            ui.label(RichText::new("●").color(dot));
+            ui.label(RichText::new(text).color(MUTED));
+            ui.add_space(24.0);
+            ui.label(RichText::new("Profile").color(MUTED));
+            let active = self.profile();
             for n in 1..=5 {
-                ui.radio_value(&mut self.profile, n, n.to_string());
+                if pill(ui, &n.to_string(), self.status.is_some() && n == active) {
+                    self.run(cli::Cmd::Profile(n));
+                    self.load_led();
+                }
             }
-            if ui.button("Switch").clicked() {
-                let n = self.profile;
-                self.run(&format!("Profile {n}"), |m| m.send_all(&proto::profile(n)));
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Unstick").on_hover_text("Leave config mode. Use if the mouse stops moving.").clicked() {
+                    let r = Mouse::open().and_then(|m| m.unstick());
+                    (self.msg, self.err) = match r {
+                        Ok(()) => ("Sent config mode off".into(), false),
+                        Err(e) => (e, true),
+                    };
+                }
+                if ui.button("⟳ Refresh").clicked() {
+                    self.refresh();
+                    self.load_led();
+                }
+            });
         });
+    }
 
-        ui.separator();
-        ui.heading("Lighting");
-        ui.horizontal(|ui| {
-            ui.label("Profile");
-            egui::ComboBox::from_id_salt("led_profile")
-                .selected_text(self.led_profile.to_string())
-                .show_ui(ui, |ui| {
-                    for n in 1..=5 {
-                        ui.selectable_value(&mut self.led_profile, n, n.to_string());
-                    }
-                });
-            egui::ComboBox::from_id_salt("effect").selected_text(self.effect.name()).show_ui(ui, |ui| {
+    fn nav(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(4.0);
+        for (p, name, sub) in Page::ALL {
+            let on = self.page == p;
+            let r = egui::Frame::new()
+                .fill(if on { CARD } else { PANEL })
+                .stroke(if on { Stroke::new(1.0, ACCENT) } else { Stroke::NONE })
+                .corner_radius(8)
+                .inner_margin(egui::Margin::symmetric(12, 8))
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.label(RichText::new(name).strong().color(if on { Color32::WHITE } else { MUTED }));
+                    ui.label(RichText::new(sub).small().color(MUTED));
+                })
+                .response
+                .interact(egui::Sense::click());
+            if r.clicked() {
+                self.page = p;
+            }
+        }
+    }
+
+    fn lighting(&mut self, ui: &mut egui::Ui) {
+        let p = self.profile();
+        card(ui, "Effect", &format!("Applies to profile {p}"), |ui| {
+            ui.horizontal_wrapped(|ui| {
                 for e in Effect::ALL {
-                    ui.selectable_value(&mut self.effect, e, e.name());
+                    if pill(ui, e.name(), self.effect == e) {
+                        self.effect = e;
+                    }
                 }
             });
-            if self.effect.needs_color() {
-                ui.color_edit_button_srgb(&mut self.color);
-            }
-            if ui.button("Apply").clicked() {
-                let (p, e, c) = (self.led_profile, self.effect, self.color);
-                self.run(&format!("Lighting {}", e.name()), |m| m.send_all(&proto::led(p, e, c, &m.leds()?)));
-            }
         });
+        if self.effect.needs_color() {
+            card(ui, "Color", "", |ui| {
+                ui.horizontal(|ui| {
+                    let (r, painter) = ui.allocate_painter(Vec2::new(64.0, 64.0), egui::Sense::hover());
+                    painter.rect_filled(r.rect, 12.0, rgb(self.color));
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            for c in PRESETS {
+                                let b = egui::Button::new("").fill(rgb(c)).corner_radius(14).min_size(Vec2::splat(28.0));
+                                let b = if c == self.color { b.stroke(Stroke::new(2.0, Color32::WHITE)) } else { b };
+                                if ui.add(b).clicked() {
+                                    self.color = c;
+                                }
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Custom").color(MUTED));
+                            ui.color_edit_button_srgb(&mut self.color);
+                            ui.label(RichText::new(format!("#{:02X}{:02X}{:02X}", self.color[0], self.color[1], self.color[2])).monospace());
+                        });
+                    });
+                });
+            });
+        }
+        let apply = egui::Button::new(RichText::new("Apply lighting").color(Color32::WHITE).strong())
+            .fill(ACCENT)
+            .min_size(Vec2::new(160.0, 36.0));
+        if ui.add(apply).clicked() {
+            self.run(cli::Cmd::Led(p, self.effect, self.color));
+        }
+    }
 
-        ui.separator();
-        ui.heading("Poll rate (profile 1)");
-        ui.horizontal(|ui| {
-            ui.radio_value(&mut self.poll_hz, 500, "500 Hz");
-            ui.radio_value(&mut self.poll_hz, 1000, "1000 Hz");
-            if ui.button("Apply").clicked() {
-                let hz = self.poll_hz;
-                self.run(&format!("Poll {hz} Hz"), |m| m.send_all(&proto::poll(hz)));
-            }
-        });
-
-        ui.separator();
-        ui.heading("DPI stages (profile 1)");
-        ui.label("Only values seen from the vendor app. Formula unknown.");
-        for stage in 1..=5 {
-            ui.horizontal(|ui| {
-                ui.label(format!("Stage {stage}"));
-                egui::ComboBox::from_id_salt(("dpi", stage)).selected_text(self.dpi[stage - 1].to_string()).show_ui(ui, |ui| {
+    fn dpi(&mut self, ui: &mut egui::Ui) {
+        let codes = self.status.as_ref().map(|s| s.dpi);
+        card(ui, "DPI stages", "Profile 1. Only values seen from the vendor app are offered. Click to save.", |ui| {
+            for stage in 1..=5 {
+                let cur = codes.and_then(|c| proto::dpi_from_code(c[stage - 1]));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("Stage {stage}")).strong());
+                    ui.add_space(12.0);
                     for (d, _) in proto::DPI_VALUES {
-                        ui.selectable_value(&mut self.dpi[stage - 1], d, d.to_string());
+                        if pill(ui, &d.to_string(), cur == Some(d)) && cur != Some(d) {
+                            self.run(cli::Cmd::Dpi(stage, d));
+                        }
                     }
                 });
-                if ui.button("Set").clicked() {
-                    let d = self.dpi[stage - 1];
-                    self.run(&format!("DPI stage {stage} = {d}"), |m| {
-                        m.send_all(&proto::dpi(stage, d).ok_or("unknown DPI value")?)
-                    });
-                }
-            });
-        }
-
-        ui.separator();
-        ui.heading("Side keys (profile 1)");
-        ui.label("New key: a letter, a digit, or volup.");
-        for side in 1..=8 {
-            let current = self.status.as_ref().map(|s| s.side_keys[side - 1]);
-            let locked = current.is_some_and(|e| proto::is_slot0_macro(&e));
-            ui.horizontal(|ui| {
-                ui.label(format!("Key {side}:"));
-                ui.label(current.map(|e| proto::describe_entry(&e)).unwrap_or("?".into()));
-                if locked {
-                    ui.label("(locked)");
-                    return;
-                }
-                ui.add(egui::TextEdit::singleline(&mut self.keys[side - 1]).desired_width(60.0));
-                if ui.button("Set").clicked() {
-                    let k = self.keys[side - 1].clone();
-                    self.run(&format!("Side key {side} = {k}"), |m| {
-                        let entry = proto::key_entry(&k).ok_or("use a letter, a digit, or volup")?;
-                        m.guard_side_key(side)?;
-                        m.send_all(&proto::key(side, entry))
-                    });
-                }
-            });
-        }
-
-        ui.separator();
-        ui.heading("Macro (slot 1)");
-        ui.label("Letters are key taps, numbers are ms waits. Example: a,50,b");
-        ui.horizontal(|ui| {
-            ui.label("Side key");
-            egui::ComboBox::from_id_salt("macro_side").selected_text(self.macro_side.to_string()).show_ui(ui, |ui| {
-                for n in 1..=8 {
-                    ui.selectable_value(&mut self.macro_side, n, n.to_string());
-                }
-            });
-            ui.text_edit_singleline(&mut self.macro_spec);
-            if ui.button("Write").clicked() {
-                let (side, spec) = (self.macro_side, self.macro_spec.clone());
-                self.run(&format!("Macro on side key {side}"), |m| {
-                    let packets = proto::macro_(side, &spec)?;
-                    m.guard_side_key(side)?;
-                    m.send_all(&packets)
-                });
             }
+        });
+    }
+
+    fn buttons(&mut self, ui: &mut egui::Ui) {
+        let keys = self.status.as_ref().map(|s| s.side_keys);
+        card(ui, "Side keys", "Profile 1. New key: a letter, a digit, or volup. Keys holding your slot 0 macro are locked.", |ui| {
+            egui::Grid::new("keys").num_columns(4).spacing([16.0, 10.0]).show(ui, |ui| {
+                for side in 1..=8 {
+                    let cur = keys.map(|k| k[side - 1]);
+                    ui.label(RichText::new(format!("Key {side}")).strong());
+                    let text = cur.map_or("?".into(), |e| proto::describe_entry(&e));
+                    ui.label(RichText::new(text).monospace().color(MUTED));
+                    if cur.is_some_and(|e| proto::is_slot0_macro(&e)) {
+                        ui.label(RichText::new("🔒 locked").color(MUTED));
+                        ui.label("");
+                    } else {
+                        ui.add(egui::TextEdit::singleline(&mut self.keys[side - 1]).hint_text("key").desired_width(70.0));
+                        if ui.button("Set").clicked() {
+                            match cli::parse(&format!("key {side} {}", self.keys[side - 1])) {
+                                Ok(Some(c)) => self.run(c),
+                                Ok(None) => {}
+                                Err(e) => (self.msg, self.err) = (e, true),
+                            }
+                        }
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+    }
+
+    fn macro_page(&mut self, ui: &mut egui::Ui) {
+        card(ui, "Macro slot 1", "Letters are key taps, numbers are waits in ms. Example: a,50,b. Slot 0 is never written.", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Side key");
+                egui::ComboBox::from_id_salt("macro_side").selected_text(self.macro_side.to_string()).show_ui(ui, |ui| {
+                    for n in 1..=8 {
+                        ui.selectable_value(&mut self.macro_side, n, n.to_string());
+                    }
+                });
+                ui.add(egui::TextEdit::singleline(&mut self.macro_spec).desired_width(240.0).font(egui::TextStyle::Monospace));
+                if ui.button("Write").clicked() {
+                    match cli::parse(&format!("macro {} {}", self.macro_side, self.macro_spec)) {
+                        Ok(Some(c)) => self.run(c),
+                        Ok(None) => {}
+                        Err(e) => (self.msg, self.err) = (e, true),
+                    }
+                }
+            });
+        });
+    }
+
+    fn performance(&mut self, ui: &mut egui::Ui) {
+        let cur = self.status.as_ref().and_then(|s| s.poll_hz);
+        card(ui, "Polling rate", "Profile 1. Click to save.", |ui| {
+            ui.horizontal(|ui| {
+                for hz in [500, 1000] {
+                    if pill(ui, &format!("{hz} Hz"), cur == Some(hz)) && cur != Some(hz) {
+                        self.run(cli::Cmd::Poll(hz));
+                    }
+                }
+            });
+        });
+        card(ui, "Command line", "Same settings from a terminal or a script. See AGENTS.md.", |ui| {
+            ui.label(RichText::new("m811 status > my.cfg\nm811 apply my.cfg").monospace());
         });
     }
 }
