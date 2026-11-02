@@ -92,7 +92,7 @@ impl Effect {
             Effect::Rainbow => "Rainbow",
             Effect::Flash => "Flash",
             Effect::Wave => "Wave",
-            Effect::Trace => "Go without trace",
+            Effect::Trace => "Trace",
             Effect::Reactive => "Reactive",
         }
     }
@@ -138,9 +138,10 @@ impl Effect {
 }
 
 /// LED live preview. `others` = current records of all 5 profiles (only used for the
-/// profiles we don't change). profile is 1-5.
-pub fn led(profile: usize, effect: Effect, rgb: [u8; 3], others: &[[u8; 7]; 5]) -> Vec<Packet> {
-    assert!((1..=5).contains(&profile));
+/// profiles we don't change). profile and active are 1-5. `active` is the profile the
+/// mouse is on now: the sequence ends by writing it back, so the mouse stays there.
+pub fn led(profile: usize, effect: Effect, rgb: [u8; 3], others: &[[u8; 7]; 5], active: usize) -> Vec<Packet> {
+    assert!((1..=5).contains(&profile) && (1..=5).contains(&active));
     let rgb = if effect.needs_color() { rgb } else { [0xFF, 0x00, 0x00] };
     let (t, s, f) = effect.bytes();
     let mut v = vec![write(0x0446, &[0, 0])];
@@ -152,9 +153,10 @@ pub fn led(profile: usize, effect: Effect, rgb: [u8; 3], others: &[[u8; 7]; 5]) 
         }
     }
     v.push(pkt(&[0x02, 0xF1, 0x02, 0x04]));
-    // Fixed value from the profile number. Never read this word back and rewrite it:
-    // that left 83 00 in it once.
-    v.push(write(0x002C, &[profile as u8 - 1, 0]));
+    // Fixed value from a 1-5 profile number. Never copy the raw word back:
+    // that left 83 00 in it once. Writing the LED's profile here switched the mouse to it
+    // (apply of a full status file ended on profile 5), so write the active one.
+    v.push(write(0x002C, &[active as u8 - 1, 0]));
     v
 }
 
@@ -298,7 +300,7 @@ mod tests {
     // Expected bytes below are `m811.py ... --dry` output.
     #[test]
     fn led_full_green() {
-        let got = hex(&led(1, Effect::Full, [0, 0xFF, 0], &[WAVE_RECORD; 5]));
+        let got = hex(&led(1, Effect::Full, [0, 0xFF, 0], &[WAVE_RECORD; 5], 1));
         assert_eq!(
             got,
             [
@@ -316,9 +318,16 @@ mod tests {
 
     #[test]
     fn led_wave_profile3() {
-        let got = hex(&led(3, Effect::Wave, [1, 2, 3], &[WAVE_RECORD; 5]));
+        let got = hex(&led(3, Effect::Wave, [1, 2, 3], &[WAVE_RECORD; 5], 3));
         assert_eq!(got[3], "02 f3 59 04 07 00 00 00 ff 00 00 02 04 00 02 00");
         assert_eq!(got[7], "02 f3 2c 00 02 00 00 00 02 00 00 00 00 00 00 00");
+    }
+
+    #[test]
+    fn led_other_profile_keeps_active() {
+        // Setting profile 5's lighting while on profile 1 must not switch to 5.
+        let got = hex(&led(5, Effect::Wave, [0; 3], &[WAVE_RECORD; 5], 1));
+        assert_eq!(got[7], "02 f3 2c 00 02 00 00 00 00 00 00 00 00 00 00 00");
     }
 
     #[test]

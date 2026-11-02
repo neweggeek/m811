@@ -88,6 +88,14 @@ impl Mouse {
         Ok(out)
     }
 
+    /// Active profile 1-5. Errors on anything else rather than guessing.
+    pub fn active_profile(&self) -> Result<usize, String> {
+        match self.read(0x0028)?[4] {
+            p @ 0..=4 => Ok(p as usize + 1),
+            p => Err(format!("profile word reads {p:02x}, expected 00-04. Run `m811 profile N` first.")),
+        }
+    }
+
     pub fn side_key(&self, side: usize) -> Result<[u8; 4], String> {
         Ok(self.read_n(proto::side_key_addr(side), 4)?.try_into().unwrap())
     }
