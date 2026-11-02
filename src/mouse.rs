@@ -12,7 +12,7 @@ pub struct Status {
     pub profile: u8,
     pub poll_hz: Option<u32>,
     pub leds: [[u8; 7]; 5],
-    /// Raw X value per stage (DPI_VALUES maps it to dpi when known).
+    /// Raw X code per stage (proto::dpi_from_code maps it to dpi).
     pub dpi: [u8; 5],
     pub side_keys: [[u8; 4]; 8],
 }

@@ -339,13 +339,15 @@ impl App {
 
     fn dpi(&mut self, ui: &mut egui::Ui) {
         let codes = self.status.as_ref().map(|s| s.dpi);
-        card(ui, "DPI stages", "Profile 1. Only values seen from the vendor app are offered. Click to save.", |ui| {
+        card(ui, "DPI stages", "Profile 1. Click to save. Any 200-6200 step 100 works from the command line.", |ui| {
             for stage in 1..=5 {
                 let cur = codes.and_then(|c| proto::dpi_from_code(c[stage - 1]));
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("Stage {stage}")).strong());
+                    let now = cur.map_or("?".into(), |d| d.to_string());
+                    ui.label(RichText::new(format!("{now:>4}")).monospace().color(MUTED));
                     ui.add_space(12.0);
-                    for (d, _) in proto::DPI_VALUES {
+                    for d in proto::DPI_PRESETS {
                         if pill(ui, &d.to_string(), cur == Some(d)) && cur != Some(d) {
                             self.run(cli::Cmd::Dpi(stage, d));
                         }

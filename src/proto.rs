@@ -12,9 +12,23 @@ pub const MACRO_SLOT: u8 = 1;
 /// LED record for profile n (1-5) lives at LED_ADDRS[n-1], 7 bytes.
 pub const LED_ADDRS: [u16; 5] = [0x0449, 0x0451, 0x0459, 0x0461, 0x0469];
 pub const BRIGHTNESS: u8 = 0x02;
-/// Only values seen in captures. Formula unknown, so no other values.
-pub const DPI_VALUES: [(u32, u8); 6] =
-    [(500, 0x0B), (600, 0x0D), (1000, 0x16), (2000, 0x2D), (3000, 0x43), (6200, 0x8C)];
+/// DPI code for 100, 200, ... 6200 dpi. Copied from the vendor app's own table
+/// (RDCfg.exe, file offset 0xB8BDC, used for model "2913-A" = M811). It matches all
+/// 6 values we captured. 100 dpi maps to 0, so we start at 200.
+pub const DPI_TABLE: [u8; 62] = [
+    0, 4, 6, 9, 11, 13, 15, 18, 20, 22, 24, 27, 29, 31, 33, 36, 38, 40, 43, 45, 47, 49, 52, 54, 56, 58, 61, 63, 65, 67,
+    70, 72, 74, 77, 79, 81, 83, 86, 88, 90, 92, 95, 97, 99, 102, 104, 106, 108, 111, 113, 115, 117, 120, 122, 124,
+    127, 129, 131, 133, 135, 138, 140,
+];
+pub const DPI_MIN: u32 = 200;
+pub const DPI_MAX: u32 = 6200;
+/// Buttons in the window. Any multiple of 100 from DPI_MIN to DPI_MAX works on the CLI.
+pub const DPI_PRESETS: [u32; 10] = [400, 800, 1000, 1200, 1600, 2000, 2400, 3200, 4000, 6200];
+
+/// Code for a dpi value, or None if it is not a multiple of 100 in DPI_MIN..=DPI_MAX.
+pub fn dpi_code(dpi: u32) -> Option<u8> {
+    (dpi % 100 == 0 && (DPI_MIN..=DPI_MAX).contains(&dpi)).then(|| DPI_TABLE[dpi as usize / 100 - 1])
+}
 
 pub type Packet = Vec<u8>;
 
@@ -174,10 +188,10 @@ pub fn poll(hz: u32) -> Vec<Packet> {
     config(vec![write(0x0032, &[code, 0x00])])
 }
 
-/// stage 1-5, dpi one of DPI_VALUES. Profile 1.
+/// stage 1-5, dpi see dpi_code. Profile 1.
 pub fn dpi(stage: usize, dpi: u32) -> Option<Vec<Packet>> {
     assert!((1..=5).contains(&stage));
-    let v = DPI_VALUES.iter().find(|(d, _)| *d == dpi)?.1;
+    let v = dpi_code(dpi)?;
     Some(config(vec![write(0x0044 + 6 * (stage as u16 - 1), &[0x01, v, 0x00, v, 0x00])]))
 }
 
@@ -265,7 +279,28 @@ pub fn describe_entry(e: &[u8; 4]) -> String {
 }
 
 pub fn dpi_from_code(code: u8) -> Option<u32> {
-    DPI_VALUES.iter().find(|(_, c)| *c == code).map(|(d, _)| *d)
+    let i = DPI_TABLE.iter().position(|&c| c == code && c != 0)?;
+    Some((i as u32 + 1) * 100)
+}
+
+/// Lift-off distance, 1 or 2. Vendor app: one byte at 0x002A, then apply group 08.
+/// From static analysis of the vendor app (fn 0x458E20), not yet tested on the mouse.
+pub fn lift(n: u8) -> Vec<Packet> {
+    assert!((1..=2).contains(&n));
+    config(vec![write(0x002A, &[n, 0x00])])
+}
+
+/// Scroll speed for profile 1. `current` = the 10 bytes at 0x0020 (one word per profile),
+/// so the other profiles keep their value. Vendor app sends all 5 in one 64-byte report 3
+/// (fn SendScrollSpeed 0x458580). Not yet tested on the mouse.
+pub fn scroll(n: u8, current: &[u8; 10]) -> Vec<Packet> {
+    let mut words = *current;
+    words[0] = n;
+    words[1] = 0;
+    let mut report = vec![0x03, 0xF3, 0x20, 0x00, 0x0A, 0, 0, 0];
+    report.extend(words);
+    report.resize(64, 0);
+    config(vec![report])
 }
 
 #[cfg(test)]
@@ -339,6 +374,31 @@ mod tests {
     fn dpi_2_3000() {
         assert_eq!(hex(&dpi(2, 3000).unwrap()), cfg("02 f3 4a 00 05 00 00 00 01 43 00 43 00 00 00 00"));
         assert!(dpi(1, 1234).is_none());
+        assert!(dpi(1, 100).is_none());
+        assert!(dpi(1, 6300).is_none());
+    }
+
+    #[test]
+    fn dpi_table_matches_captures() {
+        for (d, c) in [(500, 0x0B), (600, 0x0D), (1000, 0x16), (2000, 0x2D), (3000, 0x43), (6200, 0x8C)] {
+            assert_eq!(dpi_code(d), Some(c));
+            assert_eq!(dpi_from_code(c), Some(d));
+        }
+        assert!(DPI_TABLE.windows(2).all(|w| w[0] < w[1]));
+        assert_eq!(dpi_from_code(0), None);
+    }
+
+    #[test]
+    fn lift_2() {
+        assert_eq!(hex(&lift(2)), cfg("02 f3 2a 00 02 00 00 00 02 00 00 00 00 00 00 00"));
+    }
+
+    #[test]
+    fn scroll_keeps_other_profiles() {
+        let p = scroll(3, &[1, 0, 2, 0, 1, 0, 1, 0, 1, 0]);
+        assert_eq!(p[1].len(), 64);
+        assert_eq!(p[1][..18], [0x03, 0xF3, 0x20, 0x00, 0x0A, 0, 0, 0, 3, 0, 2, 0, 1, 0, 1, 0, 1, 0]);
+        assert_eq!(hex(&p[2..7]), APPLY);
     }
 
     #[test]
