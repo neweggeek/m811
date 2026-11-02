@@ -338,10 +338,10 @@ impl App {
     }
 
     fn dpi(&mut self, ui: &mut egui::Ui) {
-        let codes = self.status.as_ref().map(|s| s.dpi);
+        let codes = self.status.as_ref().map(|s| (s.dpi, s.dpi_flags));
         card(ui, "DPI stages", "Profile 1. Click to save. Any 200-6200 step 100 works from the command line.", |ui| {
             for stage in 1..=5 {
-                let cur = codes.and_then(|c| proto::dpi_from_code(c[stage - 1]));
+                let cur = codes.filter(|(_, f)| f[stage - 1] == 0).and_then(|(c, _)| proto::dpi_from_code(c[stage - 1]));
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("Stage {stage}")).strong());
                     let now = cur.map_or("?".into(), |d| d.to_string());

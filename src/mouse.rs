@@ -14,6 +14,12 @@ pub struct Status {
     pub leds: [[u8; 7]; 5],
     /// Raw X code per stage (proto::dpi_from_code maps it to dpi).
     pub dpi: [u8; 5],
+    /// X flag byte per stage. Non-zero = a range above 6200 that we do not decode.
+    pub dpi_flags: [u8; 5],
+    /// Raw 10 bytes at 0x0020: scroll speed word per profile.
+    pub scroll: [u8; 10],
+    /// Raw byte at 0x002A: lift-off distance.
+    pub lift: u8,
     pub side_keys: [[u8; 4]; 8],
 }
 
@@ -112,6 +118,7 @@ impl Mouse {
         let head = self.read(0x0028)?;
         let poll = self.read(0x0030)?;
         let keys = self.read_n(proto::SIDE_KEY_BASE, 32)?;
+        let dpi = self.read_n(0x0044, 30)?;
         let mut side_keys = [[0u8; 4]; 8];
         for (i, k) in side_keys.iter_mut().enumerate() {
             k.copy_from_slice(&keys[i * 4..i * 4 + 4]);
@@ -124,10 +131,10 @@ impl Mouse {
                 _ => None,
             },
             leds: self.leds()?,
-            dpi: {
-                let d = self.read_n(0x0044, 30)?;
-                [d[1], d[7], d[13], d[19], d[25]]
-            },
+            dpi: [dpi[1], dpi[7], dpi[13], dpi[19], dpi[25]],
+            dpi_flags: [dpi[2], dpi[8], dpi[14], dpi[20], dpi[26]],
+            scroll: self.read_n(0x0020, 10)?.try_into().unwrap(),
+            lift: head[2],
             side_keys,
         })
     }

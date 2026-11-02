@@ -283,24 +283,42 @@ pub fn dpi_from_code(code: u8) -> Option<u32> {
     Some((i as u32 + 1) * 100)
 }
 
-/// Lift-off distance, 1 or 2. Vendor app: one byte at 0x002A, then apply group 08.
+/// Lift-off distance, 1 or 2. Vendor app: one byte at 0x002A, then apply group 08 only.
 /// From static analysis of the vendor app (fn 0x458E20), not yet tested on the mouse.
 pub fn lift(n: u8) -> Vec<Packet> {
     assert!((1..=2).contains(&n));
-    config(vec![write(0x002A, &[n, 0x00])])
+    let mut v = vec![enter(), write(0x002A, &[n, 0x00])];
+    v.extend(apply(&[0x08]));
+    v.push(exit());
+    v
 }
+
+pub const SCROLL_MAX: u8 = 10;
 
 /// Scroll speed for profile 1. `current` = the 10 bytes at 0x0020 (one word per profile),
 /// so the other profiles keep their value. Vendor app sends all 5 in one 64-byte report 3
 /// (fn SendScrollSpeed 0x458580). Not yet tested on the mouse.
-pub fn scroll(n: u8, current: &[u8; 10]) -> Vec<Packet> {
+/// Refuses if any profile word is not 1-SCROLL_MAX with a zero high byte, so odd state
+/// is never copied back (the same trap as the profile word in led()).
+pub fn scroll(n: u8, current: &[u8; 10]) -> Result<Vec<Packet>, String> {
+    if !(1..=SCROLL_MAX).contains(&n) {
+        return Err(format!("scroll must be 1-{SCROLL_MAX}, got {n}"));
+    }
+    if let Some(i) = (0..5).find(|&i| !(1..=SCROLL_MAX).contains(&current[2 * i]) || current[2 * i + 1] != 0) {
+        return Err(format!(
+            "profile {} scroll word reads {:02x} {:02x}, expected 01-{SCROLL_MAX:02x} 00. Not writing.",
+            i + 1,
+            current[2 * i],
+            current[2 * i + 1]
+        ));
+    }
     let mut words = *current;
     words[0] = n;
     words[1] = 0;
     let mut report = vec![0x03, 0xF3, 0x20, 0x00, 0x0A, 0, 0, 0];
     report.extend(words);
     report.resize(64, 0);
-    config(vec![report])
+    Ok(config(vec![report]))
 }
 
 #[cfg(test)]
@@ -390,15 +408,22 @@ mod tests {
 
     #[test]
     fn lift_2() {
-        assert_eq!(hex(&lift(2)), cfg("02 f3 2a 00 02 00 00 00 02 00 00 00 00 00 00 00"));
+        assert_eq!(
+            hex(&lift(2)),
+            [ENTER, "02 f3 2a 00 02 00 00 00 02 00 00 00 00 00 00 00", APPLY[3], EXIT]
+        );
     }
 
     #[test]
     fn scroll_keeps_other_profiles() {
-        let p = scroll(3, &[1, 0, 2, 0, 1, 0, 1, 0, 1, 0]);
+        let p = scroll(3, &[1, 0, 2, 0, 1, 0, 1, 0, 1, 0]).unwrap();
         assert_eq!(p[1].len(), 64);
         assert_eq!(p[1][..18], [0x03, 0xF3, 0x20, 0x00, 0x0A, 0, 0, 0, 3, 0, 2, 0, 1, 0, 1, 0, 1, 0]);
         assert_eq!(hex(&p[2..7]), APPLY);
+        assert!(scroll(0, &[1, 0, 1, 0, 1, 0, 1, 0, 1, 0]).is_err());
+        assert!(scroll(11, &[1, 0, 1, 0, 1, 0, 1, 0, 1, 0]).is_err());
+        assert!(scroll(3, &[1, 0, 1, 0, 0x83, 0, 1, 0, 1, 0]).is_err());
+        assert!(scroll(3, &[1, 0, 1, 0, 1, 0, 1, 1, 1, 0]).is_err());
     }
 
     #[test]

@@ -145,7 +145,7 @@ pub fn run(m: &Mouse, c: &Cmd) -> Result<(), String> {
         Cmd::Lift(n) => m.send_all(&proto::lift(*n)),
         Cmd::Scroll(n) => {
             let cur: [u8; 10] = m.read_n(0x0020, 10)?.try_into().unwrap();
-            m.send_all(&proto::scroll(*n, &cur))
+            m.send_all(&proto::scroll(*n, &cur)?)
         }
         Cmd::Key(side, k) => {
             m.guard_side_key(*side)?;
@@ -175,10 +175,15 @@ pub fn status_text(s: &Status) -> String {
         None => t += "# poll unknown\n",
     }
     for (i, &c) in s.dpi.iter().enumerate() {
-        match proto::dpi_from_code(c) {
-            Some(d) => t += &format!("dpi {} {d}\n", i + 1),
-            None => t += &format!("# dpi {} unknown code {c:02x}\n", i + 1),
+        match (s.dpi_flags[i], proto::dpi_from_code(c)) {
+            (0, Some(d)) => t += &format!("dpi {} {d}\n", i + 1),
+            (f, _) => t += &format!("# dpi {} unknown code {c:02x} flag {f:02x}\n", i + 1),
         }
+    }
+    // Shown, not replayed: lift and scroll are untested. Uncomment to apply.
+    t += &format!("# lift {}\n", s.lift);
+    for p in 0..5 {
+        t += &format!("# scroll profile {} = {:02x} {:02x}\n", p + 1, s.scroll[2 * p], s.scroll[2 * p + 1]);
     }
     for (i, e) in s.side_keys.iter().enumerate() {
         let d = proto::describe_entry(e);
@@ -283,7 +288,10 @@ mod tests {
             profile: 1,
             poll_hz: Some(500),
             leds: [[0, 255, 0, 1, 0, 2, 2], [255, 0, 0, 2, 4, 0, 2], [0; 7], [0; 7], [0; 7]],
-            dpi: [0x0B, 0x16, 0x2D, 0x43, 0x8C],
+            dpi: [0x0B, 0x16, 0x2D, 0x43, 0x48],
+            dpi_flags: [0, 0, 0, 0, 1],
+            scroll: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+            lift: 1,
             side_keys: [[0x90, 0, 0x1E, 0], [0x91, 0, 1, 0], [0x8E, 1, 0xE9, 0], [0x90, 0, 4, 0], [0; 4], [0; 4], [0; 4], [0; 4]],
         };
         let t = status_text(&s);
@@ -291,6 +299,9 @@ mod tests {
         assert!(t.contains("# key 2 = macro slot 0"));
         assert!(t.contains("key 3 volup\n"));
         assert!(t.ends_with("profile 1\n"));
-        assert_eq!(parse_all(&t).unwrap().len(), 1 + 5 + 1 + 5 + 3);
+        // Stage 5 uses flag 01 (above 6200): must not come out as "dpi 5 3100".
+        assert!(t.contains("# dpi 5 unknown code 48 flag 01\n"));
+        assert!(t.contains("# lift 1\n"));
+        assert_eq!(parse_all(&t).unwrap().len(), 1 + 5 + 1 + 4 + 3);
     }
 }
