@@ -22,8 +22,8 @@ Commands (also valid as lines in a config file):
                                solid, breathing, flash need a color
   poll HZ                      500 or 1000 (profile 1)
   dpi STAGE VALUE              STAGE 1-5, VALUE 200-6200 in steps of 100 (profile 1)
-  lift N                       lift-off distance 1 or 2 (untested)
-  scroll N                     scroll speed 1-10 (profile 1, untested)
+  lift N                       lift-off distance 1 or 2
+  scroll N                     scroll speed 1-10 (profile 1)
   key SIDE KEY                 SIDE 1-8, KEY a-z, 0-9 or volup (profile 1)
   macro SIDE SPEC              SPEC like a,50,b (letters tap, numbers wait ms)
                                writes macro slot 1, binds it to SIDE
@@ -180,7 +180,7 @@ pub fn status_text(s: &Status) -> String {
             (f, _) => t += &format!("# dpi {} unknown code {c:02x} flag {f:02x}\n", i + 1),
         }
     }
-    // Shown, not replayed: lift and scroll are untested. Uncomment to apply.
+    // Shown, not replayed: what each value feels like is not checked yet. Uncomment to apply.
     t += &format!("# lift {}\n", s.lift);
     for p in 0..5 {
         t += &format!("# scroll profile {} = {:02x} {:02x}\n", p + 1, s.scroll[2 * p], s.scroll[2 * p + 1]);

@@ -23,8 +23,8 @@ yet tried from our script. **static** = read from the vendor app's code (RDCfg.e
 
 | Address | Meaning | Status |
 |---|---|---|
-| 0x0020, 10 bytes | Scroll speed, 5 words, one per profile. Written with report 3 | captured, meaning static |
-| 0x002A, 2 bytes | Lift-off distance [n, 00], then F1 02 08. App default n = 1 | static |
+| 0x0020, 10 bytes | Scroll speed, 5 words, one per profile. Written with report 3 | tested (readback) |
+| 0x002A, 2 bytes | Lift-off distance [n, 00]. App default n = 1. Vendor applies group 08 only | tested (readback) |
 | 0x002C, 2 bytes | Active profile: 00 = MODE 1, 01 = MODE 2 | tested |
 | 0x0032-0x003B | 5 words, polling rate per profile: 01 = 1000 Hz, 02 = 500 Hz | tested |
 | 0x003C, 0x003E | "SendKeyMapMode": 3C = [00 01 ..], 3E = [00 00]. Purpose unclear | static |
@@ -143,6 +143,14 @@ F3 002C (n-1, 00), then F1 02 with 01 04 01 02 08 10, no F5. Exact order matters
 ## App Apply
 
 F5 00, full rewrite of everything (~290 packets), F1 02 04/01/02/08/10, F5 01.
+
+## Live test 2026-11-02 (dpi / scroll / lift)
+
+Exact Rust bytes from a Python script, each in F5 00 ... apply all ... F5 01, read back after:
+dpi 1 1600 -> 0x0044 = 01 24 00 24 00. scroll 3 -> 0x0020 = 03 00 + other profiles kept.
+lift 2 -> 0x002A = 02 00. All restored, byte-identical. After each write the LEDs flash red
+for a few seconds, then return to their effect by themselves (LED records unchanged).
+How each value feels (cursor speed, scroll lines, lift height) not checked yet.
 
 ## Tested from m811.py (2026-11-01/02)
 

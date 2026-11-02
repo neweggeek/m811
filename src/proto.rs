@@ -283,21 +283,19 @@ pub fn dpi_from_code(code: u8) -> Option<u32> {
     Some((i as u32 + 1) * 100)
 }
 
-/// Lift-off distance, 1 or 2. Vendor app: one byte at 0x002A, then apply group 08 only.
-/// From static analysis of the vendor app (fn 0x458E20), not yet tested on the mouse.
+/// Lift-off distance, 1 or 2. One byte at 0x002A (vendor fn 0x458E20).
+/// Tested 2026-11-02 with this exact sequence: reads back 02 00, mouse fine.
+/// (The vendor app applies only group 08 here; full apply is what we tested.)
 pub fn lift(n: u8) -> Vec<Packet> {
     assert!((1..=2).contains(&n));
-    let mut v = vec![enter(), write(0x002A, &[n, 0x00])];
-    v.extend(apply(&[0x08]));
-    v.push(exit());
-    v
+    config(vec![write(0x002A, &[n, 0x00])])
 }
 
 pub const SCROLL_MAX: u8 = 10;
 
 /// Scroll speed for profile 1. `current` = the 10 bytes at 0x0020 (one word per profile),
 /// so the other profiles keep their value. Vendor app sends all 5 in one 64-byte report 3
-/// (fn SendScrollSpeed 0x458580). Not yet tested on the mouse.
+/// (fn SendScrollSpeed 0x458580). Tested 2026-11-02: reads back, other profiles kept.
 /// Refuses if any profile word is not 1-SCROLL_MAX with a zero high byte, so odd state
 /// is never copied back (the same trap as the profile word in led()).
 pub fn scroll(n: u8, current: &[u8; 10]) -> Result<Vec<Packet>, String> {
@@ -408,10 +406,7 @@ mod tests {
 
     #[test]
     fn lift_2() {
-        assert_eq!(
-            hex(&lift(2)),
-            [ENTER, "02 f3 2a 00 02 00 00 00 02 00 00 00 00 00 00 00", APPLY[3], EXIT]
-        );
+        assert_eq!(hex(&lift(2)), cfg("02 f3 2a 00 02 00 00 00 02 00 00 00 00 00 00 00"));
     }
 
     #[test]

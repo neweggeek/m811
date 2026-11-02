@@ -15,7 +15,7 @@ sends. Unit tests check the bytes match.
 - Lighting per profile: off, solid, breathing, rainbow, flash, wave, go without trace, reactive
 - Poll rate 500 / 1000 Hz (profile 1)
 - DPI stages 1-5, 200-6200 in steps of 100 (profile 1, vendor table)
-- Lift-off distance and scroll speed (untested, see PROTOCOL.md)
+- Lift-off distance and scroll speed (profile 1 for scroll)
 - Remap side keys 1-8 to a letter, digit or volume up (profile 1)
 - Write macro slot 1 and bind it to a side key
 
