@@ -131,7 +131,7 @@ pub fn parse_all(text: &str) -> Result<Vec<Cmd>, String> {
 pub fn run(m: &Mouse, c: &Cmd) -> Result<(), String> {
     match c {
         Cmd::Profile(n) => m.send_all(&proto::profile(*n)),
-        Cmd::Led(p, e, rgb) => m.send_all(&proto::led(*p, *e, *rgb, &m.leds()?)),
+        Cmd::Led(p, e, rgb) => m.send_all(&proto::led(*p, *e, *rgb, &m.leds()?, m.active_profile()?)),
         Cmd::Poll(hz) => m.send_all(&proto::poll(*hz)),
         Cmd::Dpi(s, v) => m.send_all(&proto::dpi(*s, *v).unwrap()),
         Cmd::Key(side, k) => {
@@ -147,7 +147,7 @@ pub fn run(m: &Mouse, c: &Cmd) -> Result<(), String> {
 
 /// Status as config lines, so the output can be edited and fed back to `apply`.
 pub fn status_text(s: &Status) -> String {
-    let mut t = format!("# M811 status. Valid config: edit and run `m811 apply`.\nprofile {}\n", s.profile);
+    let mut t = "# M811 status. Valid config: edit and run `m811 apply`.\n".to_string();
     for (i, rec) in s.leds.iter().enumerate() {
         match Effect::from_record(rec) {
             Some(e) if e.needs_color() => {
@@ -175,6 +175,8 @@ pub fn status_text(s: &Status) -> String {
             t += &format!("# key {} = {d}\n", i + 1);
         }
     }
+    // Last, so the mouse ends on this profile whatever the lines above do.
+    t += &format!("profile {}\n", s.profile);
     t
 }
 
@@ -262,6 +264,7 @@ mod tests {
         assert!(t.contains("led 1 solid 00ff00\n"));
         assert!(t.contains("# key 2 = macro slot 0"));
         assert!(t.contains("key 3 volup\n"));
+        assert!(t.ends_with("profile 1\n"));
         assert_eq!(parse_all(&t).unwrap().len(), 1 + 5 + 1 + 5 + 3);
     }
 }
