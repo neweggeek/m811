@@ -21,7 +21,9 @@ Commands (also valid as lines in a config file):
                                EFFECT: off solid breathing rainbow flash wave trace reactive
                                solid, breathing, flash need a color
   poll HZ                      500 or 1000 (profile 1)
-  dpi STAGE VALUE              STAGE 1-5, VALUE 500 600 1000 2000 3000 6200 (profile 1)
+  dpi STAGE VALUE              STAGE 1-5, VALUE 200-6200 in steps of 100 (profile 1)
+  lift N                       lift-off distance 1 or 2 (untested)
+  scroll N                     scroll speed 1-10 (profile 1, untested)
   key SIDE KEY                 SIDE 1-8, KEY a-z, 0-9 or volup (profile 1)
   macro SIDE SPEC              SPEC like a,50,b (letters tap, numbers wait ms)
                                writes macro slot 1, binds it to SIDE
@@ -35,6 +37,8 @@ pub enum Cmd {
     Led(usize, Effect, [u8; 3]),
     Poll(u32),
     Dpi(usize, u32),
+    Lift(u8),
+    Scroll(u8),
     Key(usize, String),
     Macro(usize, String),
 }
@@ -93,10 +97,12 @@ pub fn parse(line: &str) -> Result<Option<Cmd>, String> {
             let stage = num(w.next(), "stage", 1, 5)?;
             let v = num(w.next(), "dpi", 1, 100_000)? as u32;
             if proto::dpi(stage, v).is_none() {
-                return Err(format!("dpi must be one of 500 600 1000 2000 3000 6200, got {v}"));
+                return Err(format!("dpi must be 200-6200 in steps of 100, got {v}"));
             }
             Cmd::Dpi(stage, v)
         }
+        "lift" => Cmd::Lift(num(w.next(), "lift", 1, 2)? as u8),
+        "scroll" => Cmd::Scroll(num(w.next(), "scroll", 1, 10)? as u8),
         "key" => {
             let side = num(w.next(), "side key", 1, 8)?;
             let k = w.next().ok_or("missing key")?.to_string();
@@ -136,6 +142,11 @@ pub fn run(m: &Mouse, c: &Cmd) -> Result<(), String> {
         Cmd::Led(p, e, rgb) => m.send_all(&proto::led(*p, *e, *rgb, &m.leds()?, m.active_profile()?)),
         Cmd::Poll(hz) => m.send_all(&proto::poll(*hz)),
         Cmd::Dpi(s, v) => m.send_all(&proto::dpi(*s, *v).unwrap()),
+        Cmd::Lift(n) => m.send_all(&proto::lift(*n)),
+        Cmd::Scroll(n) => {
+            let cur: [u8; 10] = m.read_n(0x0020, 10)?.try_into().unwrap();
+            m.send_all(&proto::scroll(*n, &cur))
+        }
         Cmd::Key(side, k) => {
             m.guard_side_key(*side)?;
             m.send_all(&proto::key(*side, proto::key_entry(k).unwrap()))
@@ -247,7 +258,12 @@ mod tests {
         assert_eq!(parse("LED 1 wave").unwrap(), Some(Cmd::Led(1, Effect::Wave, [255, 0, 0])));
         assert_eq!(parse("  # just a comment").unwrap(), None);
         assert_eq!(parse("dpi 3 2000").unwrap(), Some(Cmd::Dpi(3, 2000)));
-        assert!(parse("dpi 3 2100").is_err());
+        assert_eq!(parse("dpi 3 2100").unwrap(), Some(Cmd::Dpi(3, 2100)));
+        assert!(parse("dpi 3 2150").is_err());
+        assert_eq!(parse("lift 2").unwrap(), Some(Cmd::Lift(2)));
+        assert!(parse("lift 3").is_err());
+        assert_eq!(parse("scroll 3").unwrap(), Some(Cmd::Scroll(3)));
+        assert!(parse("scroll 0").is_err());
         assert!(parse("led 1 solid").is_err());
         assert!(parse("key 9 a").is_err());
         assert!(parse("key 1 a b").is_err());

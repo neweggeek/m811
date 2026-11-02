@@ -18,7 +18,7 @@ m811 led N EFFECT [RRGGBB]   lighting for profile N
                              EFFECT: off solid breathing rainbow flash wave trace reactive
                              solid, breathing and flash need a hex color, e.g. ff0000
 m811 poll HZ                 polling rate 500 or 1000 (profile 1 only)
-m811 dpi STAGE VALUE         STAGE 1-5, VALUE one of 500 600 1000 2000 3000 6200 (profile 1 only)
+m811 dpi STAGE VALUE         STAGE 1-5, VALUE 200-6200 in steps of 100 (profile 1 only)
 m811 key SIDE KEY            remap side key SIDE (1-8) to KEY: a-z, 0-9 or volup (profile 1 only)
 m811 macro SIDE SPEC         write a macro to slot 1 and bind it to side key SIDE
                              SPEC: comma list, letters are key taps, numbers are waits in ms
